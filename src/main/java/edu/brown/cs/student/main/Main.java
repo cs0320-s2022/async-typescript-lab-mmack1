@@ -6,10 +6,13 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import freemarker.template.Configuration;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -22,9 +25,9 @@ import spark.template.freemarker.FreeMarkerEngine;
  *
  */
 public final class Main {
-
+  
   private static final int DEFAULT_PORT = 4567;
-
+  
   /**
    * The initial method called when execution begins.
    *
@@ -34,31 +37,31 @@ public final class Main {
   public static void main(String[] args) {
     new Main(args).run();
   }
-
+  
   private String[] args;
-
+  
   private Main(String[] args) {
     this.args = args;
   }
-
+  
   private void run() {
     OptionParser parser = new OptionParser();
     parser.accepts("gui");
     parser.accepts("port").withRequiredArg().ofType(Integer.class)
         .defaultsTo(DEFAULT_PORT);
-
+    
     OptionSet options = parser.parse(args);
     if (options.has("gui")) {
       runSparkServer((int) options.valueOf("port"));
     }
   }
-
+  
   private void runSparkServer(int port) {
     Spark.port(port);
     Spark.exception(Exception.class, new ExceptionPrinter());
-
+    
     // Setup Spark Routes
-
+    
     // TODO: create a call to Spark.post to make a POST request to a URL which
     // will handle getting matchmaking results for the input
     // It should only take in the route and a new ResultsHandler
@@ -67,21 +70,23 @@ public final class Main {
       if (accessControlRequestHeaders != null) {
         response.header("Access-Control-Allow-Headers", accessControlRequestHeaders);
       }
-
+      
       String accessControlRequestMethod = request.headers("Access-Control-Request-Method");
-
+      
       if (accessControlRequestMethod != null) {
         response.header("Access-Control-Allow-Methods", accessControlRequestMethod);
       }
-
+      
       return "OK";
     });
-
+    
+    Spark.post("/results", new ResultsHandler());
+    
     // Allows requests from any domain (i.e., any URL). This makes development
     // easier, but it’s not a good idea for deployment.
     Spark.before((request, response) -> response.header("Access-Control-Allow-Origin", "*"));
   }
-
+  
   /**
    * Display an error page when an exception occurs in the server.
    */
@@ -98,10 +103,10 @@ public final class Main {
       res.body(stacktrace.toString());
     }
   }
-
+  
   /**
    * Handles requests for horoscope matching on an input
-   * 
+   *
    * @return GSON which contains the result of MatchMaker.makeMatches
    */
   private static class ResultsHandler implements Route {
@@ -110,14 +115,20 @@ public final class Main {
       // TODO: Get JSONObject from req and use it to get the value of the sun, moon,
       // and rising
       // for generating matches
-
+      JsonObject json = JsonParser.parseString(req.body()).getAsJsonObject();
+      String sun = json.get("sun").toString();
+      String moon = json.get("moon").toString();
+      String rising = json.get("rising").toString();
+      
       // TODO: use the MatchMaker.makeMatches method to get matches
-
+      List<String> matches = MatchMaker.makeMatches(sun, moon, rising);
+      
       // TODO: create an immutable map using the matches
-
+      ImmutableMap<String, List<String>> map = ImmutableMap.of("matches", matches);
+      
       // TODO: return a json of the suggestions (HINT: use GSON.toJson())
       Gson GSON = new Gson();
-      return null;
+      return GSON.toJson(map);
     }
   }
 }
